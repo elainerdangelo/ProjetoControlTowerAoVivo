@@ -1,0 +1,52 @@
+# Bundle do Projeto Farol (Vértice Tecnologia).
+# Docs: https://docs.databricks.com/dev-tools/bundles/index.html
+bundle:
+  name: vertice
+  uuid: 11aec022-6236-459f-ae70-5c73da7a7124
+
+include:
+  - resources/*.yml
+
+# my_project/ e minha-torre/ são outros bundles (o app tem o próprio databricks.yml):
+# ficam fora do sync, senão o deploy do vertice sobe o node_modules do app inteiro.
+sync:
+  exclude:
+    - my_project/**
+    - minha-torre/**
+    - llm/**
+    - aulas/**
+
+variables:
+  catalog:
+    description: Catálogo do projeto
+    default: lakehouse_vertice
+  warehouse_id:
+    description: SQL warehouse das sql_task (Serverless Starter Warehouse)
+    default: 287b54bcf4b0ebe0
+  # Chaves do data lake (Supabase Storage, protocolo S3).
+  # O valor NUNCA vai para arquivo versionado: fica em
+  # .databricks/bundle/<target>/variable-overrides.json (ignorado pelo .gitignore).
+  aws_access_key_id:
+    description: Access key do data lake
+  aws_secret_access_key:
+    description: Secret key do data lake
+  s3_endpoint:
+    description: Endpoint S3 do data lake
+
+targets:
+  dev:
+    # Sem mode: development (ele prefixaria os nomes com [dev usuario]).
+    # Os agendamentos ficam pausados no dev.
+    default: true
+    presets:
+      trigger_pause_status: PAUSED
+    workspace:
+      host: https://dbc-a9f9a29f-d655.cloud.databricks.com
+  prod:
+    mode: production
+    workspace:
+      host: https://dbc-a9f9a29f-d655.cloud.databricks.com
+      root_path: /Workspace/Users/elainerdangelo@gmail.com/.bundle/${bundle.name}/${bundle.target}
+    permissions:
+      - user_name: elainerdangelo@gmail.com
+        level: CAN_MANAGE

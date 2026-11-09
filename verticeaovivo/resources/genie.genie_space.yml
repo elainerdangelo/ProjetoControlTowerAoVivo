@@ -1,0 +1,12 @@
+# Genie Agent "Farol · Diretoria": o dono pergunta em português.
+# O conteúdo (tabelas, instruções, exemplos) é GERADO por scripts/gerar_genie.py em
+# resources/farol.geniespace.json: mude o script, não o JSON nem o workspace.
+# O Genie só é criado se as tabelas existirem (a metric view nasce no job):
+# do zero, deploy → run → deploy.
+resources:
+  genie_spaces:
+    genie_farol:
+      title: "Farol · Diretoria"
+      description: "Agente da diretoria da Vértice: projetos atrasados e de quais clientes, quanto o atraso custa, gente parada e o que vai dar errado no próximo mês. Lê a gold, a metric view mv_projetos e as entregas de fornecedor."
+      warehouse_id: ${var.warehouse_id}
+      file_path: ./farol.geniespace.json

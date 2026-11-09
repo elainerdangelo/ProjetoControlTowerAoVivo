@@ -1,0 +1,48 @@
+bundle:
+  name: minha-torre
+
+variables:
+  sql_warehouse_id:
+    description: SQL Warehouse ID
+  genie_space_id:
+    description: Id do Genie "Farol · Diretoria" (bundle summary do bundle vertice)
+  genie_space_name:
+    description: Nome do Genie
+
+resources:
+  apps:
+    app:
+      name: "minha-torre"
+      description: "Projeto Farol: a Torre de Controle da Vértice"
+      source_code_path: ./
+
+      # Start the app automatically on deploy.
+      lifecycle:
+        started: true
+      # O Genie responde EM NOME de quem está logado (on-behalf-of): ele só enxerga o que o
+      # Unity Catalog deixa essa pessoa enxergar. Na 1ª visita o app pede consentimento OAuth.
+      user_api_scopes:
+        - dashboards.genie
+
+      # The resources which this app has access to.
+      resources:
+        - name: sql-warehouse
+          sql_warehouse:
+            id: ${var.sql_warehouse_id}
+            permission: CAN_USE
+        - name: genie-space
+          genie_space:
+            name: ${var.genie_space_name}
+            space_id: ${var.genie_space_id}
+            permission: CAN_RUN
+
+targets:
+  default:
+    default: true
+    workspace:
+      host: https://dbc-a9f9a29f-d655.cloud.databricks.com
+
+    variables:
+      sql_warehouse_id: 287b54bcf4b0ebe0
+      genie_space_id: 01f1dc55310412c0a803427917292339
+      genie_space_name: "Farol · Diretoria"

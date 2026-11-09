@@ -1,0 +1,103 @@
+# Job vertice_farol · a Torre de Controle da Vértice, toda segunda às 6h (America/Sao_Paulo).
+#
+#  ingestao_feriados ──┐
+#                      ├── conferencia_bronze ── medalhao ──┬── testes_de_qualidade ──┐
+#  ingestao_data_lake ─┘                                    └── status_com_ia ────────┴── metricas_governadas
+#
+# As 7 tarefas:
+#  1 ingestao_feriados    notebook · BrasilAPI → volume bronze.raw (feriados do ano)
+#  2 ingestao_data_lake   notebook · boto3 baixa o data lake (S3/Supabase) e recria as 9 tabelas da bronze
+#  3 conferencia_bronze   sql_task · confere a contagem das 9 tabelas, para o job se algo veio errado
+#  4 medalhao             pipeline vertice_medalhao · bronze → silver (7) → gold (3)
+#  5 testes_de_qualidade  sql_task · 10 testes, qualquer um que falhe quebra o job
+#  6 status_com_ia        sql_task · MERGE incremental do status semanal por regra, IA ou palavra-chave
+#  7 metricas_governadas  sql_task · metric view gold.mv_projetos (SPI, CPI, estouro... uma fórmula só)
+#
+# As chaves do data lake chegam por ${var.…}: o valor fica em
+# .databricks/bundle/dev/variable-overrides.json, que o .gitignore deixa fora do Git.
+# No target dev o agendamento fica pausado pelo preset (trigger_pause_status: PAUSED).
+resources:
+  jobs:
+    vertice_farol:
+      name: vertice_farol
+      # duas execuções ao mesmo tempo apagariam a bronze uma da outra
+      max_concurrent_runs: 1
+      schedule:
+        quartz_cron_expression: "0 0 6 ? * MON"
+        timezone_id: America/Sao_Paulo
+      performance_target: PERFORMANCE_OPTIMIZED
+      queue:
+        enabled: true
+      environments:
+        - environment_key: Default
+          spec:
+            environment_version: "6"
+
+      tasks:
+        # 1 · feriados nacionais (API), em paralelo com o data lake
+        - task_key: ingestao_feriados
+          environment_key: Default
+          notebook_task:
+            notebook_path: ../src/ingestao/01_ingestao_api_gabarito.py
+            source: WORKSPACE
+
+        # 2 · baixa o data lake (boto3) e recria as 9 tabelas da bronze
+        - task_key: ingestao_data_lake
+          environment_key: Default
+          notebook_task:
+            notebook_path: ../src/ingestao/02_ingestao_boto3_gabarito.py
+            source: WORKSPACE
+            base_parameters:
+              AWS_ACCESS_KEY_ID: ${var.aws_access_key_id}
+              AWS_DEFAULT_REGION: us-east-1
+              AWS_SECRET_ACCESS_KEY: ${var.aws_secret_access_key}
+              S3_ENDPOINT: ${var.s3_endpoint}
+
+        # 3 · confere a contagem das 9 tabelas da bronze antes de seguir
+        - task_key: conferencia_bronze
+          depends_on:
+            - task_key: ingestao_feriados
+            - task_key: ingestao_data_lake
+          sql_task:
+            warehouse_id: ${var.warehouse_id}
+            file:
+              path: ../src/conferencia/00-conferencia-bronze.sql
+              source: WORKSPACE
+
+        # 4 · o pipeline declarativo: bronze → silver → gold
+        - task_key: medalhao
+          depends_on:
+            - task_key: conferencia_bronze
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.vertice_medalhao.id}
+
+        # 5 · os 10 testes de qualidade: qualquer um que falhe quebra o job
+        - task_key: testes_de_qualidade
+          depends_on:
+            - task_key: medalhao
+          sql_task:
+            warehouse_id: ${var.warehouse_id}
+            file:
+              path: ../src/testes/testes.sql
+              source: WORKSPACE
+
+        # 6 · o texto do status vira coluna (em paralelo com os testes: uma não lê a outra)
+        - task_key: status_com_ia
+          depends_on:
+            - task_key: medalhao
+          sql_task:
+            warehouse_id: ${var.warehouse_id}
+            file:
+              path: ../src/ia/status_estruturado.sql
+              source: WORKSPACE
+
+        # 7 · a metric view gold.mv_projetos: a fórmula de cada KPI num lugar só (o Genie lê daqui)
+        - task_key: metricas_governadas
+          depends_on:
+            - task_key: testes_de_qualidade
+            - task_key: status_com_ia
+          sql_task:
+            warehouse_id: ${var.warehouse_id}
+            file:
+              path: ../src/metricas/metricas.sql
+              source: WORKSPACE
